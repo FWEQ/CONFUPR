@@ -107,12 +107,12 @@ class EmulatorGUI(tk.Tk):
     def cmd_exit(self, args: List[str]):
         if len(args) == 0:
             self._write("exit")
-            self.quit()
+            self.destroy()
         elif len(args) == 1:
             try:
                 code = int(args[0])
                 self._write(f"exit {code}")
-                self.quit()
+                self.destroy()
             except ValueError:
                 self._write("Error: exit ожидает числовой код возврата")
         else:
