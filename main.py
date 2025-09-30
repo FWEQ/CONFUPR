@@ -4,17 +4,22 @@ import socket
 import tkinter as tk
 from tkinter.scrolledtext import ScrolledText
 from typing import List
+import argparse
+import configparser
+import os
+import sys
 
 PREFIX = "{user}@{host}:~$ "
 
 class EmulatorGUI(tk.Tk):
-    def __init__(self):
+    def __init__(self, config):
         super().__init__()
         user = getpass.getuser()
         host = socket.gethostname()
 
         self.user = user
         self.host = host
+        self.config = config # считываем конфиг лоль
 
         self.title(f"Эмулятор - [{user}@{host}]")
         self.geometry("800x480")
@@ -49,6 +54,28 @@ class EmulatorGUI(tk.Tk):
         self._write("Поддерживаемые (заглушки): ls, cd, exit. Аргументы в кавычках учитываются.")
         self.entry.focus_set()
 
+        if self.config.get("script"):
+            #сделать функцию парс строки из заготовки,вызов команд
+            self.run_script(self.config["script"])
+
+    def run_script(self, path):
+        if not os.path.exists(path):
+            self._write(f"ошибкаб скрипт {path} не найден")
+            return
+        self._write(f"выполенение стартового скрипта {path}")
+        try:
+            with open(path,"r",encoding="utf-8") as f:
+                for line in f:
+                    line = line.strip()
+                    if not line:
+                        continue
+                    self._write(f"{PREFIX.format(user=self.user, host=self.host)}{line}")
+                    try:
+                        self.execute_line(line)
+                    except Exception as e:
+                        self._write(f"Ошибка выполнения строки '{line}': {e}")
+        except Exception as e:
+            self._write(f"Ошибка чтения скрипта: {e}")
     def _write(self, text: str):
         self.output.config(state="normal")
         self.output.insert("end", text + ("\n" if not text.endswith("\n") else ""))
@@ -86,9 +113,15 @@ class EmulatorGUI(tk.Tk):
             self.cmd_exit(args)
         elif cmd == "help":
             self.cmd_help(args)
+        elif cmd == "conf-dump":
+            self.cmd_conf_dump(args)
         else:
             self._write(f"Error: неизвестная команда: '{cmd}'")
 
+    def cmd_conf_dump(self, args: List[str]):
+        self._write("Текущая конфигурация:")
+        for k, v in self.config.items():
+            self._write(f"{k} = {v}")
 
     def cmd_ls(self, args: List[str]):
         if args:
@@ -122,6 +155,17 @@ class EmulatorGUI(tk.Tk):
         self._write("Поддерживаемые команды (этап 1, заглушки): ls, cd, exit, help")
         self._write("Парсер аргументов поддерживает кавычки: например: ls \"file name with spaces\"")
 
+def load_config():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--vfs", help="Путь к виртуальной файловой системе", default="")
+    parser.add_argument("--script", help="Путь к стартовому скрипту", default="")
+    args = parser.parse_args()
+
+    return {
+        "vfs": args.vfs,
+        "script": args.script
+    }
+
 if __name__ == "__main__":
-    app = EmulatorGUI()
+    app = EmulatorGUI(load_config())
     app.mainloop()
