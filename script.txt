@@ -2,4 +2,5 @@ ls
 cd "some dir"
 cd "some dir1" "some dir2"
 unknowncmd arg1
-ls "file with spaces.txt"
+ls "myvfs"
+ls "notexistdir"

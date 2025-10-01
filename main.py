@@ -4,12 +4,10 @@ import socket
 import tkinter as tk
 from tkinter.scrolledtext import ScrolledText
 from typing import List
-import argparse
-import configparser
-import os
-import sys
+import argparse # хавает аргументы из команд строки
+import os # пути и т.п.
 
-PREFIX = "{user}@{host}:~$ "
+PREFIX = "{user}@{host}:{cwd}$ "
 
 class EmulatorGUI(tk.Tk):
     def __init__(self, config):
@@ -20,6 +18,11 @@ class EmulatorGUI(tk.Tk):
         self.user = user
         self.host = host
         self.config = config # считываем конфиг лоль
+
+        self.vfs_root = os.path.abspath(config.get("vfs") if config.get("vfs") else os.getcwd())
+        if not os.path.isdir(self.vfs_root):
+            raise ValueError(f"Ошибка: VFS путь {self.vfs_root} не является директорией")
+        self.cwd = self.vfs_root
 
         self.title(f"Эмулятор - [{user}@{host}]")
         self.geometry("800x480")
@@ -39,7 +42,7 @@ class EmulatorGUI(tk.Tk):
         entry_frame.pack(fill="x")
         self.prompt_label = tk.Label(
             entry_frame,
-            text=PREFIX.format(user=user,host=host),
+            text=self.make_prompt(),
             font=("Consolas",11),
         )
         self.prompt_label.pack(side="left")
@@ -50,13 +53,21 @@ class EmulatorGUI(tk.Tk):
             expand=True)
         self.entry.bind("<Return>", self.on_enter)
 
-        self._write("Добро пожаловать в эмулятор (Вариант 11 — Этап 1).")
-        self._write("Поддерживаемые (заглушки): ls, cd, exit. Аргументы в кавычках учитываются.")
+        self._write("Добро пожаловать в эмулятор (Вариант 11 — Этап 3).")
+        self._write("Поддерживаемые команды: ls, cd, exit, conf-dump. Аргументы в кавычках учитываются.")
         self.entry.focus_set()
 
         if self.config.get("script"):
             #сделать функцию парс строки из заготовки,вызов команд
             self.run_script(self.config["script"])
+
+    def make_prompt(self):
+        rel = os.path.relpath(self.cwd, self.vfs_root)
+        if rel == ".":
+            cwd_display = "/"
+        else:
+            cwd_display = "/" + rel.replace("\\", '/')
+        return PREFIX.format(user=self.user, host=self.host, cwd=cwd_display)
 
     def run_script(self, path):
         if not os.path.exists(path):
@@ -69,13 +80,14 @@ class EmulatorGUI(tk.Tk):
                     line = line.strip()
                     if not line:
                         continue
-                    self._write(f"{PREFIX.format(user=self.user, host=self.host)}{line}")
+                    self._write(f"{self.make_prompt()}{line}")
                     try:
                         self.execute_line(line)
                     except Exception as e:
                         self._write(f"Ошибка выполнения строки '{line}': {e}")
         except Exception as e:
             self._write(f"Ошибка чтения скрипта: {e}")
+
     def _write(self, text: str):
         self.output.config(state="normal")
         self.output.insert("end", text + ("\n" if not text.endswith("\n") else ""))
@@ -85,8 +97,7 @@ class EmulatorGUI(tk.Tk):
     def on_enter(self, event):
         line = self.entry.get()
         self.entry.delete(0, "end")
-        prompt = PREFIX.format(user=self.user, host=self.host)
-        self._write(f"{prompt}{line}")
+        self._write(f"{self.make_prompt()}{line}")
         try:
             self.execute_line(line)
         except Exception as e:
@@ -122,21 +133,57 @@ class EmulatorGUI(tk.Tk):
         self._write("Текущая конфигурация:")
         for k, v in self.config.items():
             self._write(f"{k} = {v}")
+        self._write(f"cwd = {self.cwd}")
 
     def cmd_ls(self, args: List[str]):
-        if args:
-            self._write(f"ls called with args: {args}")
+        start_cwd = self.cwd
+        def walk(path, prefix=""):
+            try:
+                entries = sorted(os.listdir(path))
+            except Exception as e:
+                self._write(f"Ошибка доступа: {e}")
+                return
+            for i, name in enumerate(entries):
+                full = os.path.join(path, name)
+                if i == len(entries)-1:
+                    connector = "└── "
+                else:
+                    connector = "├── "
+                self._write(prefix + connector + name + ("/" if os.path.isdir(full) else ""))
+                if os.path.isdir(full):
+                    extension = "    " if i == len(entries) - 1 else "│   "
+                    walk(full, prefix + extension)
+        if not args:
+            self._write(".")
+            walk(self.cwd)
+            self.cwd = '.'
         else:
-            self._write("ls called with no args")
+            for i in args:
+                self._write(".")
+                walk(i)
+                self.cwd = '.'
 
     def cmd_cd(self, args: List[str]):
         if len(args) == 0:
-            self._write("cd called with no args (go to home) — (заглушка)")
+            self.cwd = self.vfs_root
+            self._write("Переход в корень VFS")
         elif len(args) == 1:
-            self._write(f"cd called with arg: {args[0]}")
+            target = os.path.join(self.cwd, args[0])
+            abs_target = os.path.abspath(target)
+
+            if not abs_target.startswith(self.vfs_root):
+                self._write("Ошибка: выход за пределы VFS запрещён")
+                return
+
+            if os.path.isdir(abs_target):
+                self.cwd = abs_target
+                self._write(f"Текущая директория: {self.cwd}")
+            else:
+                self._write(f"cd: нет такой директории: {args[0]}")
         else:
             self._write("Error: cd принимает не более одного аргумента")
 
+        self.prompt_label.config(text=self.make_prompt())
     def cmd_exit(self, args: List[str]):
         if len(args) == 0:
             self._write("exit")
@@ -162,7 +209,7 @@ def load_config():
     args = parser.parse_args()
 
     return {
-        "vfs": args.vfs,
+        "vfs": args.vfs or None,
         "script": args.script
     }
 
