@@ -78,7 +78,7 @@ class EmulatorGUI(tk.Tk):
             with open(path,"r",encoding="utf-8") as f:
                 for line in f:
                     line = line.strip()
-                    if not line:
+                    if not line or line.startswith("#"):
                         continue
                     self._write(f"{self.make_prompt()}{line}")
                     try:
