@@ -1,6 +1,7 @@
 ls
 cd "some dir"
 cd "some dir1" "some dir2"
+# Лоль
 unknowncmd arg1
 ls "myvfs"
 ls "notexistdir"

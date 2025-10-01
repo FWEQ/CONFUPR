@@ -9,6 +9,7 @@ import os # пути и т.п.
 
 PREFIX = "{user}@{host}:{cwd}$ "
 
+
 class EmulatorGUI(tk.Tk):
     def __init__(self, config):
         super().__init__()
