@@ -140,7 +140,7 @@ class EmulatorGUI(tk.Tk):
         start_cwd = self.cwd
         def walk(path, prefix=""):
             try:
-                entries = sorted(os.listdir(path))
+                entries = sorted([e for e in os.listdir(path) if not e.startswith(".")])
             except Exception as e:
                 self._write(f"Ошибка доступа: {e}")
                 return
